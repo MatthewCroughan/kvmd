@@ -2,7 +2,7 @@
   description = "The main Pi-KVM daemon";
 
   # Nixpkgs / NixOS version to use.
-  inputs.nixpkgs.url = "github:nixos/nixpkgs/nixos-21.11";
+  inputs.nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
 
   outputs = { self, nixpkgs }:
     let
@@ -18,8 +18,8 @@
     {
       # A Nixpkgs overlay.
       overlay = final: prev: {
-        python39Packages = final.python39.pkgs;
-        python39 = prev.python39.override {
+        python310Packages = final.python310.pkgs;
+        python310 = prev.python310.override {
           packageOverrides = self: super: {
             pyghmi = super.buildPythonPackage rec {
               pname = "pyghmi";
@@ -43,6 +43,18 @@
               # - These packages from the PKGBUILD are of interest, as I may not be supplying them properly.
               #   - "janus-gateway-pikvm>=0.11.2-7"
               #   - "raspberrypi-io-access>=0.5"
+
+              prePatch = ''
+                ls -lah kvmd/libc.py
+                cat kvmd/libc.py
+                substituteInPlace kvmd/libc.py \
+                  --replace 'ctypes.util.find_library("c")' '"${final.stdenv.glibc.out}/lib/libc.so.6"'
+
+                substituteInPlace kvmd/apps/kvmd/tesseract.py \
+                  --replace 'ctypes.util.find_library("tesseract")' '"${final.tesseract4.out}/lib/libtesseract.so.4"'
+                cat kvmd/libc.py
+              '';
+
               propagatedBuildInputs = pythonDeps ++ systemDeps;
               systemDeps = with prev; [
                 libgpiod
@@ -50,10 +62,7 @@
                 v4l-utils
                 nginxMainline
                 openssl
-                platformio
                 avrdude # this was avrdude-svn in the PKGBUILD, which might be different
-                gnumake # why do we need make?
-                gnupatch # May be unnecessary since patch should be included in the stdenv
                 iptables
                 iproute2
                 dnsmasq
@@ -65,7 +74,6 @@
                 # netctl # not packaged on Nix
                 dos2unix
                 parted
-                e2fsprogs
                 openssh
                 wpa_supplicant
               ];
@@ -100,12 +108,12 @@
       # Provide some binary packages for selected system types.
       packages = forAllSystems (system:
         {
-          inherit (nixpkgsFor.${system}) python39Packages;
+          inherit (nixpkgsFor.${system}) python310Packages;
         });
 
       # The default package for 'nix build'. This makes sense if the
       # flake provides only one package or there is a clear "main"
       # package.
-      defaultPackage = forAllSystems (system: self.packages.${system}.python39Packages.kvmd);
+      defaultPackage = forAllSystems (system: self.packages.${system}.python310Packages.kvmd);
     };
 }
